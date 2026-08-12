@@ -32,7 +32,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-android-${{ runner.os }}-${{ hashFiles('MusicBetter/MusicBetter.csproj') }}
@@ -86,7 +86,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-windows-${{ runner.os }}-${{ hashFiles('MusicBetter/MusicBetter.csproj') }}
