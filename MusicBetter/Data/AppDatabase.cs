@@ -3,15 +3,12 @@ using SQLite;
 
 namespace MusicBetter.Data;
 
-/// <summary>
-/// Вся база данных хранится локально на устройстве (файл .db3 в AppDataDirectory).
-/// Это значит: избранное, локальные треки и плейлисты работают полностью офлайн,
-/// без какого-либо облака и без рекламы/трекеров.
-/// </summary>
 public class AppDatabase
 {
     private readonly SQLiteAsyncConnection _db;
     private static AppDatabase? _instance;
+    private static readonly SemaphoreSlim _initLock = new(1, 1);
+    private bool _initialized;
 
     public static AppDatabase Instance =>
         _instance ??= new AppDatabase(Path.Combine(FileSystem.AppDataDirectory, "musicbetter.db3"));
@@ -19,33 +16,64 @@ public class AppDatabase
     private AppDatabase(string dbPath)
     {
         _db = new SQLiteAsyncConnection(dbPath);
-        _db.CreateTableAsync<Track>().Wait();
-        _db.CreateTableAsync<Playlist>().Wait();
-        _db.CreateTableAsync<PlaylistTrack>().Wait();
     }
 
-    // --- Tracks ---
+    private async Task EnsureInitializedAsync()
+    {
+        if (_initialized) return;
 
-    public Task<List<Track>> GetAllTracksAsync() =>
-        _db.Table<Track>().OrderByDescending(t => t.AddedAt).ToListAsync();
+        await _initLock.WaitAsync();
+        try
+        {
+            if (_initialized) return;
 
-    public Task<List<Track>> GetFavoritesAsync() =>
-        _db.Table<Track>().Where(t => t.IsFavorite).ToListAsync();
+            await _db.CreateTableAsync<Track>();
+            await _db.CreateTableAsync<Playlist>();
+            await _db.CreateTableAsync<PlaylistTrack>();
+            _initialized = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
 
-    public Task<List<Track>> GetRecentAsync(int limit = 30) =>
-        _db.Table<Track>()
-           .Where(t => t.LastPlayedAt != null)
-           .OrderByDescending(t => t.LastPlayedAt)
-           .Take(limit)
-           .ToListAsync();
+    // ========== Tracks ==========
 
-    public Task<Track?> FindBySourceAsync(TrackSource source, string sourceId) =>
-        _db.Table<Track>()
-           .Where(t => t.Source == source && t.SourceId == sourceId)
-           .FirstOrDefaultAsync()!;
+    public async Task<List<Track>> GetAllTracksAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _db.Table<Track>().OrderByDescending(t => t.AddedAt).ToListAsync();
+    }
+
+    public async Task<List<Track>> GetFavoritesAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _db.Table<Track>().Where(t => t.IsFavorite).ToListAsync();
+    }
+
+    public async Task<List<Track>> GetRecentAsync(int limit = 30)
+    {
+        await EnsureInitializedAsync();
+        return await _db.Table<Track>()
+            .Where(t => t.LastPlayedAt != null)
+            .OrderByDescending(t => t.LastPlayedAt)
+            .Take(limit)
+            .ToListAsync();
+    }
+
+    public async Task<Track?> FindBySourceAsync(TrackSource source, string sourceId)
+    {
+        await EnsureInitializedAsync();
+        return await _db.Table<Track>()
+            .Where(t => t.Source == source && t.SourceId == sourceId)
+            .FirstOrDefaultAsync();
+    }
 
     public async Task<int> SaveTrackAsync(Track track)
     {
+        await EnsureInitializedAsync();
+
         if (track.Id != 0)
         {
             await _db.UpdateAsync(track);
@@ -56,27 +84,37 @@ public class AppDatabase
         return track.Id;
     }
 
-    public Task<int> DeleteTrackAsync(Track track) => _db.DeleteAsync(track);
+    public async Task<int> DeleteTrackAsync(Track track)
+    {
+        await EnsureInitializedAsync();
+        return await _db.DeleteAsync(track);
+    }
 
     public async Task ToggleFavoriteAsync(Track track)
     {
+        await EnsureInitializedAsync();
         track.IsFavorite = !track.IsFavorite;
         await SaveTrackAsync(track);
     }
 
     public async Task MarkPlayedAsync(Track track)
     {
+        await EnsureInitializedAsync();
         track.LastPlayedAt = DateTime.UtcNow;
         await SaveTrackAsync(track);
     }
 
-    // --- Playlists ---
+    // ========== Playlists ==========
 
-    public Task<List<Playlist>> GetPlaylistsAsync() =>
-        _db.Table<Playlist>().OrderBy(p => p.Name).ToListAsync();
+    public async Task<List<Playlist>> GetPlaylistsAsync()
+    {
+        await EnsureInitializedAsync();
+        return await _db.Table<Playlist>().OrderBy(p => p.Name).ToListAsync();
+    }
 
     public async Task<int> CreatePlaylistAsync(string name)
     {
+        await EnsureInitializedAsync();
         var playlist = new Playlist { Name = name };
         await _db.InsertAsync(playlist);
         return playlist.Id;
@@ -84,12 +122,23 @@ public class AppDatabase
 
     public async Task AddToPlaylistAsync(int playlistId, int trackId)
     {
-        var count = await _db.Table<PlaylistTrack>().Where(pt => pt.PlaylistId == playlistId).CountAsync();
-        await _db.InsertAsync(new PlaylistTrack { PlaylistId = playlistId, TrackId = trackId, SortOrder = count });
+        await EnsureInitializedAsync();
+        var count = await _db.Table<PlaylistTrack>()
+            .Where(pt => pt.PlaylistId == playlistId)
+            .CountAsync();
+
+        await _db.InsertAsync(new PlaylistTrack
+        {
+            PlaylistId = playlistId,
+            TrackId = trackId,
+            SortOrder = count
+        });
     }
 
     public async Task<List<Track>> GetPlaylistTracksAsync(int playlistId)
     {
+        await EnsureInitializedAsync();
+
         var links = await _db.Table<PlaylistTrack>()
             .Where(pt => pt.PlaylistId == playlistId)
             .OrderBy(pt => pt.SortOrder)
@@ -98,8 +147,12 @@ public class AppDatabase
         var tracks = new List<Track>();
         foreach (var link in links)
         {
-            var track = await _db.Table<Track>().Where(t => t.Id == link.TrackId).FirstOrDefaultAsync();
-            if (track != null) tracks.Add(track);
+            var track = await _db.Table<Track>()
+                .Where(t => t.Id == link.TrackId)
+                .FirstOrDefaultAsync();
+
+            if (track != null)
+                tracks.Add(track);
         }
         return tracks;
     }
