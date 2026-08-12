@@ -7,11 +7,15 @@ public partial class MainPage : ContentPage
 {
     private readonly MainViewModel _vm;
 
-    public MainPage(MainViewModel vm)
+    public MainPage()
     {
         InitializeComponent();
-        _vm = vm;
-        BindingContext = vm;
+
+        // Берём ViewModel из DI
+        _vm = Application.Current?.Handler?.MauiContext?.Services.GetService<MainViewModel>()
+              ?? new MainViewModel();
+
+        BindingContext = _vm;
 
         PlayerService.Instance.RequestExternalPlayback += async track =>
         {
