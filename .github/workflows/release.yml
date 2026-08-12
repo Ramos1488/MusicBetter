@@ -1,6 +1,8 @@
 name: Release
 
-# Запускается автоматически при пуше тега вида v1.0.0,
+# Запускается автоматически:
+#  - при пуше тега вида v1.0.0
+#  - при пуше в main (тег создаёт workflow auto-tag.yml)
 # либо вручную из вкладки Actions -> Release -> Run workflow.
 on:
   push:
@@ -19,16 +21,26 @@ permissions:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-android-${{ runner.os }}-${{ hashFiles('MusicBetter/MusicBetter.csproj') }}
+          restore-keys: |
+            nuget-android-${{ runner.os }}-
+
       - name: Install MAUI Android workload
-        run: dotnet workload install maui-android
+        run: dotnet workload install maui-android --source https://api.nuget.org/v3/index.json
 
       # Debug-сборка подписывается стандартным debug-ключом SDK — устанавливается сразу,
       # без своего keystore. Для публичного релиза в Google Play позже нужен будет
@@ -37,34 +49,52 @@ jobs:
       - name: Build Android APK
         run: dotnet build MusicBetter/MusicBetter.csproj --framework net8.0-android -c Debug -o ./artifacts/android
 
-      - name: Rename APK
+      - name: Locate and rename APK
         shell: bash
         run: |
+          set -euo pipefail
           apk=$(find ./artifacts/android -name "*-Signed.apk" | head -n 1)
           if [ -z "$apk" ]; then
             apk=$(find ./artifacts/android -name "*.apk" | head -n 1)
           fi
+          if [ -z "$apk" ]; then
+            echo "APK не найден в ./artifacts/android — сборка не создала файл." >&2
+            find ./artifacts/android -maxdepth 2 >&2
+            exit 1
+          fi
           mkdir -p ./out
           cp "$apk" ./out/MusicBetter-android.apk
+          echo "APK готов: $(ls -la ./out/MusicBetter-android.apk)"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MusicBetter-android
           path: ./out/MusicBetter-android.apk
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-windows-${{ runner.os }}-${{ hashFiles('MusicBetter/MusicBetter.csproj') }}
+          restore-keys: |
+            nuget-windows-${{ runner.os }}-
+
       - name: Install MAUI Windows workload
-        run: dotnet workload install maui-windows
+        run: dotnet workload install maui-windows --source https://api.nuget.org/v3/index.json
 
       # Публикуем как самодостаточное unpackaged-приложение (без MSIX, без Store) —
       # можно просто распаковать и запустить .exe без установки.
@@ -82,6 +112,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path ./out | Out-Null
+          $files = Get-ChildItem -Path ./artifacts/windows -Force
+          if ($files.Count -eq 0) {
+            Write-Error "В ./artifacts/windows ничего нет — publish не создал файлы."
+            exit 1
+          }
           Compress-Archive -Path ./artifacts/windows/* -DestinationPath ./out/MusicBetter-windows.zip
 
       - name: Upload Windows artifact
@@ -89,10 +124,12 @@ jobs:
         with:
           name: MusicBetter-windows
           path: ./out/MusicBetter-windows.zip
+          if-no-files-found: error
 
   release:
     needs: [ build-android, build-windows ]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Download APK
         uses: actions/download-artifact@v4
