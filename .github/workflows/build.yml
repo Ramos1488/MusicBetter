@@ -21,9 +21,6 @@ jobs:
       - name: Install MAUI Android workload
         run: dotnet workload install maui-android
 
-      - name: Restore (Android)
-        run: dotnet restore MusicBetter/MusicBetter.csproj --framework net8.0-android
-
       - name: Build (Android)
         run: dotnet build MusicBetter/MusicBetter.csproj --framework net8.0-android -c Debug
 
@@ -39,9 +36,6 @@ jobs:
 
       - name: Install MAUI Windows workload
         run: dotnet workload install maui-windows
-
-      - name: Restore (Windows)
-        run: dotnet restore MusicBetter/MusicBetter.csproj --framework net8.0-windows10.0.19041.0
 
       - name: Build (Windows)
         run: dotnet build MusicBetter/MusicBetter.csproj --framework net8.0-windows10.0.19041.0 -c Debug
