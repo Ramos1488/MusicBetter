@@ -3,12 +3,6 @@ using MusicBetter.Models;
 
 namespace MusicBetter.Services;
 
-/// **Summary:**
-
-/// Отвечает за импорт файлов с устройства в локальную библиотеку.
-/// Ничего не скачивается из интернета — только файлы, которые пользователь
-/// сам выбрал через системный FilePicker (его собственные mp3/flac/wav и т.д.).
-/// 
 public class LibraryService
 {
     private static readonly string[] SupportedExtensions = { ".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac" };
@@ -21,8 +15,7 @@ public class LibraryService
                 { DevicePlatform.Android, new[] { "audio/*" } },
                 { DevicePlatform.iOS, new[] { "public.audio" } },
                 { DevicePlatform.WinUI, new[] { ".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac" } },
-                { DevicePlatform.macOS, new[] { "public.audio" } },
-                { DevicePlatform.Tizen, new[] { "*/*" } }
+                { DevicePlatform.macOS, new[] { "public.audio" } }
             });
 
         var options = new PickOptions
@@ -62,9 +55,15 @@ public class LibraryService
         try
         {
             using var tagFile = TagLib.File.Create(fullPath);
-            if (!string.IsNullOrWhiteSpace(tagFile.Tag.Title)) track.Title = tagFile.Tag.Title;
-            if (tagFile.Tag.Performers.Length > 0) track.Artist = string.Join(", ", tagFile.Tag.Performers);
-            if (!string.IsNullOrWhiteSpace(tagFile.Tag.Album)) track.Album = tagFile.Tag.Album;
+            if (!string.IsNullOrWhiteSpace(tagFile.Tag.Title))
+                track.Title = tagFile.Tag.Title;
+
+            if (tagFile.Tag.Performers?.Length > 0)
+                track.Artist = string.Join(", ", tagFile.Tag.Performers);
+
+            if (!string.IsNullOrWhiteSpace(tagFile.Tag.Album))
+                track.Album = tagFile.Tag.Album;
+
             track.DurationSeconds = (int)tagFile.Properties.Duration.TotalSeconds;
 
             var picture = tagFile.Tag.Pictures.FirstOrDefault();
@@ -79,7 +78,7 @@ public class LibraryService
         }
         catch
         {
-            // Файл без корректных тегов — используем имя файла как есть.
+            // теги отсутствуют — оставляем имя файла
         }
 
         return track;
