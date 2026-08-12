@@ -1,5 +1,4 @@
 using CommunityToolkit.Maui;
-using Microsoft.Extensions.Logging;
 using MusicBetter.ViewModels;
 using MusicBetter.Views;
 
@@ -15,7 +14,7 @@ public static class MauiProgram
             .UseMauiCommunityToolkit();
 
         builder.Services.AddSingleton<MainViewModel>();
-        builder.Services.AddSingleton<MainPage>();
+        builder.Services.AddTransient<MainPage>();
         builder.Services.AddTransient<EmbedPlayerPage>();
 
         return builder.Build();
