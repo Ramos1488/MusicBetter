@@ -85,8 +85,8 @@ jobs:
           restore-keys: |
             nuget-windows-${{ runner.os }}-
 
-      - name: Install MAUI Windows workload
-        run: dotnet workload install maui-windows --source https://api.nuget.org/v3/index.json
+      - name: Install MAUI Workloads
+        run: dotnet workload install maui-windows maui-android --source https://api.nuget.org/v3/index.json
 
       - name: Publish Windows build
         run: >
