@@ -1,70 +1,131 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-using MusicBetter.Data;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using MusicBetter.Models;
+using MusicBetter.Data;
 
 namespace MusicBetter.Services;
 
-/// <summary>
-/// Центральный сервис плеера. Локальные треки играют через CommunityToolkit MediaElement
-/// напрямую с диска (полностью офлайн). Треки из YouTube/SoundCloud открываются через
-/// EmbedPlayerPage (WebView с официальным плеером площадки) — там нужен интернет,
-/// это ограничение самих сервисов, а не приложения.
-/// </summary>
-public partial class PlayerService : ObservableObject
+public class PlayerService : INotifyPropertyChanged
 {
     private static PlayerService? _instance;
     public static PlayerService Instance => _instance ??= new PlayerService();
 
-    [ObservableProperty]
-    private Track? currentTrack;
+    private Track? _currentTrack;
+    private bool _isPlaying;
+    private List<Track> _queue = new();
+    private int _currentIndex = -1;
 
-    [ObservableProperty]
-    private bool isPlaying;
+    public event PropertyChangedEventHandler? PropertyChanged;
+    public event Action<Track>? RequestExternalPlayback;
 
-    [ObservableProperty]
-    private List<Track> queue = new();
-
-    private int _queueIndex = -1;
-
-    public event Action<Track>? RequestExternalPlayback; // для YouTube/SoundCloud -> открыть EmbedPlayerPage
-
-    public void SetQueue(IEnumerable<Track> tracks, Track startWith)
+    public Track? CurrentTrack
     {
-        Queue = tracks.ToList();
-        _queueIndex = Queue.FindIndex(t => t.Id == startWith.Id);
-        Play(startWith);
-    }
-
-    public async void Play(Track track)
-    {
-        CurrentTrack = track;
-        IsPlaying = true;
-        await AppDatabase.Instance.MarkPlayedAsync(track);
-
-        if (track.Source != TrackSource.Local)
+        get => _currentTrack;
+        private set
         {
-            RequestExternalPlayback?.Invoke(track);
+            if (_currentTrack == value) return;
+            _currentTrack = value;
+            OnPropertyChanged();
         }
     }
 
-    public void TogglePlayPause() => IsPlaying = !IsPlaying;
+    public bool IsPlaying
+    {
+        get => _isPlaying;
+        private set
+        {
+            if (_isPlaying == value) return;
+            _isPlaying = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private PlayerService()
+    {
+        // пустой конструктор — ничего тяжёлого не делаем
+    }
+
+    public void SetQueue(IEnumerable<Track> tracks, Track startTrack)
+    {
+        _queue = tracks.ToList();
+        _currentIndex = _queue.FindIndex(t => t.Id == startTrack.Id || t.SourceId == startTrack.SourceId);
+
+        if (_currentIndex < 0)
+        {
+            _queue.Insert(0, startTrack);
+            _currentIndex = 0;
+        }
+
+        PlayCurrent();
+    }
+
+    public void TogglePlayPause()
+    {
+        if (CurrentTrack == null) return;
+
+        if (CurrentTrack.Source == TrackSource.Local)
+        {
+            // Локальное воспроизведение пока заглушка
+            IsPlaying = !IsPlaying;
+        }
+        else
+        {
+            // YouTube / SoundCloud — открываем внешний плеер
+            RequestExternalPlayback?.Invoke(CurrentTrack);
+        }
+    }
 
     public void Next()
     {
-        if (Queue.Count == 0 || _queueIndex < 0) return;
-        _queueIndex = (_queueIndex + 1) % Queue.Count;
-        Play(Queue[_queueIndex]);
+        if (_queue.Count == 0) return;
+
+        _currentIndex++;
+        if (_currentIndex >= _queue.Count)
+            _currentIndex = 0;
+
+        PlayCurrent();
     }
 
     public void Previous()
     {
-        if (Queue.Count == 0 || _queueIndex < 0) return;
-        _queueIndex = (_queueIndex - 1 + Queue.Count) % Queue.Count;
-        Play(Queue[_queueIndex]);
+        if (_queue.Count == 0) return;
+
+        _currentIndex--;
+        if (_currentIndex < 0)
+            _currentIndex = _queue.Count - 1;
+
+        PlayCurrent();
     }
 
-    public async void ToggleFavorite(Track track)
+    public void ToggleFavorite(Track track)
     {
-        await AppDatabase.Instance.ToggleFavoriteAsync(track);
+        _ = AppDatabase.Instance.ToggleFavoriteAsync(track);
+    }
+
+    private void PlayCurrent()
+    {
+        if (_currentIndex < 0 || _currentIndex >= _queue.Count) return;
+
+        CurrentTrack = _queue[_currentIndex];
+
+        if (CurrentTrack.Source == TrackSource.Local)
+        {
+            IsPlaying = true;
+            // TODO: реальное воспроизведение локального файла
+        }
+        else
+        {
+            // Для стриминга сразу открываем встроенный плеер
+            RequestExternalPlayback?.Invoke(CurrentTrack);
+            IsPlaying = true;
+        }
+
+        // Отмечаем, что трек слушали
+        _ = AppDatabase.Instance.MarkPlayedAsync(CurrentTrack);
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
