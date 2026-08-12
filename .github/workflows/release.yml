@@ -31,13 +31,13 @@ jobs:
         run: dotnet workload install maui-android
 
       - name: Restore (Android)
-        run: dotnet restore MusicBetter/MusicBetter.csproj -f net8.0-android
+        run: dotnet restore MusicBetter/MusicBetter.csproj --framework net8.0-android
 
       # Debug-сборка подписывается стандартным debug-ключом SDK — устанавливается сразу,
       # без своего keystore. Для публичного релиза в Google Play позже нужен будет
       # отдельный release keystore, но для скачивания и установки apk этого достаточно.
       - name: Build Android APK
-        run: dotnet build MusicBetter/MusicBetter.csproj -f net8.0-android -c Debug -o ./artifacts/android
+        run: dotnet build MusicBetter/MusicBetter.csproj --framework net8.0-android -c Debug -o ./artifacts/android
 
       - name: Rename APK
         shell: bash
@@ -69,14 +69,14 @@ jobs:
         run: dotnet workload install maui-windows
 
       - name: Restore (Windows)
-        run: dotnet restore MusicBetter/MusicBetter.csproj -f net8.0-windows10.0.19041.0
+        run: dotnet restore MusicBetter/MusicBetter.csproj --framework net8.0-windows10.0.19041.0
 
       # Публикуем как самодостаточное unpackaged-приложение (без MSIX, без Store) —
       # можно просто распаковать и запустить .exe без установки.
       - name: Publish Windows build
         run: >
           dotnet publish MusicBetter/MusicBetter.csproj
-          -f net8.0-windows10.0.19041.0 -c Release
+          --framework net8.0-windows10.0.19041.0 -c Release
           -p:WindowsPackageType=None
           -p:SelfContained=true
           -p:RuntimeIdentifierOverride=win-x64
