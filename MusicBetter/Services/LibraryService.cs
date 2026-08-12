@@ -3,21 +3,32 @@ using MusicBetter.Models;
 
 namespace MusicBetter.Services;
 
-/// <summary>
+/// **Summary:**
+
 /// Отвечает за импорт файлов с устройства в локальную библиотеку.
 /// Ничего не скачивается из интернета — только файлы, которые пользователь
 /// сам выбрал через системный FilePicker (его собственные mp3/flac/wav и т.д.).
-/// </summary>
+/// 
 public class LibraryService
 {
     private static readonly string[] SupportedExtensions = { ".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac" };
 
     public async Task<List<Track>> ImportFilesAsync()
     {
+        var customFileType = new FilePickerFileType(
+            new Dictionary<DevicePlatform, IEnumerable<string>>
+            {
+                { DevicePlatform.Android, new[] { "audio/*" } },
+                { DevicePlatform.iOS, new[] { "public.audio" } },
+                { DevicePlatform.WinUI, new[] { ".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac" } },
+                { DevicePlatform.macOS, new[] { "public.audio" } },
+                { DevicePlatform.Tizen, new[] { "*/*" } }
+            });
+
         var options = new PickOptions
         {
             PickerTitle = "Выберите музыкальные файлы",
-            FileTypes = FilePickerFileType.Audio
+            FileTypes = customFileType
         };
 
         var files = await FilePicker.Default.PickMultipleAsync(options);
