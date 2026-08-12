@@ -9,8 +9,11 @@ namespace MusicBetter.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    private readonly LibraryService _libraryService = new();
-    private readonly YouTubeSearchService _youTubeService = new();
+    private LibraryService? _libraryService;
+    private YouTubeSearchService? _youTubeService;
+
+    private LibraryService LibraryService => _libraryService ??= new LibraryService();
+    private YouTubeSearchService YouTubeService => _youTubeService ??= new YouTubeSearchService();
 
     [ObservableProperty]
     private ObservableCollection<TrackItemViewModel> tracks = new();
@@ -18,7 +21,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string searchQuery = string.Empty;
 
-    // 0 = Мои треки (локальные + избранное), 1 = YouTube, 2 = SoundCloud
     [ObservableProperty]
     private int activeTabIndex;
 
@@ -30,32 +32,62 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
-        PlayerService.Instance.PropertyChanged += (_, __) =>
+        try
         {
-            CurrentTrack = PlayerService.Instance.CurrentTrack;
-            IsPlaying = PlayerService.Instance.IsPlaying;
-        };
+            PlayerService.Instance.PropertyChanged += (_, __) =>
+            {
+                CurrentTrack = PlayerService.Instance.CurrentTrack;
+                IsPlaying = PlayerService.Instance.IsPlaying;
+            };
+        }
+        catch
+        {
+            // игнорируем, чтобы не крашить запуск
+        }
     }
 
     [RelayCommand]
     public async Task LoadLibraryAsync()
     {
-        var all = await AppDatabase.Instance.GetAllTracksAsync();
-        Tracks = new ObservableCollection<TrackItemViewModel>(all.Select(t => new TrackItemViewModel(t)));
+        try
+        {
+            var all = await AppDatabase.Instance.GetAllTracksAsync();
+            Tracks = new ObservableCollection<TrackItemViewModel>(
+                all.Select(t => new TrackItemViewModel(t)));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"LoadLibrary error: {ex}");
+        }
     }
 
     [RelayCommand]
     public async Task LoadFavoritesAsync()
     {
-        var favs = await AppDatabase.Instance.GetFavoritesAsync();
-        Tracks = new ObservableCollection<TrackItemViewModel>(favs.Select(t => new TrackItemViewModel(t)));
+        try
+        {
+            var favs = await AppDatabase.Instance.GetFavoritesAsync();
+            Tracks = new ObservableCollection<TrackItemViewModel>(
+                favs.Select(t => new TrackItemViewModel(t)));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"LoadFavorites error: {ex}");
+        }
     }
 
     [RelayCommand]
     public async Task ImportFilesAsync()
     {
-        await _libraryService.ImportFilesAsync();
-        await LoadLibraryAsync();
+        try
+        {
+            await LibraryService.ImportFilesAsync();
+            await LoadLibraryAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ImportFiles error: {ex}");
+        }
     }
 
     [RelayCommand]
@@ -63,43 +95,69 @@ public partial class MainViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(SearchQuery)) return;
 
-        var results = await _youTubeService.SearchAsync(SearchQuery);
-        var mapped = new List<TrackItemViewModel>();
-
-        foreach (var r in results)
+        try
         {
-            var existing = await AppDatabase.Instance.FindBySourceAsync(TrackSource.YouTube, r.SourceId);
-            var track = existing ?? new Track
+            var results = await YouTubeService.SearchAsync(SearchQuery);
+            var mapped = new List<TrackItemViewModel>();
+
+            foreach (var r in results)
             {
-                Source = TrackSource.YouTube,
-                SourceId = r.SourceId,
-                Title = r.Title,
-                Artist = r.Artist,
-                ArtworkPath = r.ThumbnailUrl,
-                DurationSeconds = r.DurationSeconds
-            };
+                var existing = await AppDatabase.Instance.FindBySourceAsync(TrackSource.YouTube, r.SourceId);
+                var track = existing ?? new Track
+                {
+                    Source = TrackSource.YouTube,
+                    SourceId = r.SourceId,
+                    Title = r.Title,
+                    Artist = r.Artist,
+                    ArtworkPath = r.ThumbnailUrl,
+                    DurationSeconds = r.DurationSeconds
+                };
 
-            if (existing is null)
-                await AppDatabase.Instance.SaveTrackAsync(track);
+                if (existing is null)
+                    await AppDatabase.Instance.SaveTrackAsync(track);
 
-            mapped.Add(new TrackItemViewModel(track));
+                mapped.Add(new TrackItemViewModel(track));
+            }
+
+            Tracks = new ObservableCollection<TrackItemViewModel>(mapped);
         }
-
-        Tracks = new ObservableCollection<TrackItemViewModel>(mapped);
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"SearchOnline error: {ex}");
+        }
     }
 
     [RelayCommand]
     public void PlayTrack(TrackItemViewModel item)
     {
-        PlayerService.Instance.SetQueue(Tracks.Select(t => t.Track), item.Track);
+        try
+        {
+            PlayerService.Instance.SetQueue(Tracks.Select(t => t.Track), item.Track);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"PlayTrack error: {ex}");
+        }
     }
 
     [RelayCommand]
-    public void TogglePlayPause() => PlayerService.Instance.TogglePlayPause();
+    public void TogglePlayPause()
+    {
+        try { PlayerService.Instance.TogglePlayPause(); }
+        catch { }
+    }
 
     [RelayCommand]
-    public void NextTrack() => PlayerService.Instance.Next();
+    public void NextTrack()
+    {
+        try { PlayerService.Instance.Next(); }
+        catch { }
+    }
 
     [RelayCommand]
-    public void PreviousTrack() => PlayerService.Instance.Previous();
+    public void PreviousTrack()
+    {
+        try { PlayerService.Instance.Previous(); }
+        catch { }
+    }
 }
