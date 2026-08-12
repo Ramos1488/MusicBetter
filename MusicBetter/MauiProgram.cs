@@ -18,10 +18,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddTransient<EmbedPlayerPage>();
 
-#if DEBUG
-        builder.Logging.AddDebug();
-#endif
-
         return builder.Build();
     }
 }
