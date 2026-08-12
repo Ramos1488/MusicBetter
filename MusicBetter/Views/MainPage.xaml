@@ -1,1 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:MusicBetter.ViewModels"
+             xmlns:viewmodels="clr-namespace:MusicBetter.ViewModels"
+             x:Class="MusicBetter.Views.MainPage"
+             x:DataType="vm:MainViewModel"
+             BackgroundColor="{StaticResource AppBackground}">
 
+    <Grid RowDefinitions="Auto,*,Auto" Padding="0" RowSpacing="0">
+
+        <!-- Верхняя часть: поиск + быстрые карточки + вкладки -->
+        <VerticalStackLayout Grid.Row="0" Padding="20,50,20,10" Spacing="16">
+
+            <!-- Поисковая строка -->
+            <Frame BackgroundColor="{StaticResource SurfaceElevated}"
+                   CornerRadius="24" Padding="16,10" HasShadow="False">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Label Text="🔍" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" Grid.Column="0" />
+                    <Entry Grid.Column="1"
+                           Placeholder="Поиск треков, плейлистов и артистов"
+                           PlaceholderColor="{StaticResource TextSecondary}"
+                           TextColor="{StaticResource TextPrimary}"
+                           BackgroundColor="Transparent"
+                           Text="{Binding SearchQuery}"
+                           ReturnCommand="{Binding SearchOnlineCommand}" />
+                </Grid>
+            </Frame>
+
+            <!-- Быстрые карточки -->
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                <Frame Grid.Column="0" Style="{StaticResource QuickCard}" BackgroundColor="{StaticResource AccentPink}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="&#9825;" FontSize="20" TextColor="White" />
+                        <Label Text="Избранные" TextColor="White" FontAttributes="Bold" FontSize="13" />
+                    </VerticalStackLayout>
+                    <Frame.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding LoadFavoritesCommand}" />
+                    </Frame.GestureRecognizers>
+                </Frame>
+
+                <Frame Grid.Column="1" Style="{StaticResource QuickCard}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="&#9835;" FontSize="20" TextColor="White" />
+                        <Label Text="Плейлисты" TextColor="White" FontAttributes="Bold" FontSize="13" />
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Grid.Column="2" Style="{StaticResource QuickCard}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="&#128337;" FontSize="20" TextColor="White" />
+                        <Label Text="Недавние" TextColor="White" FontAttributes="Bold" FontSize="13" />
+                    </VerticalStackLayout>
+                </Frame>
+            </Grid>
+
+            <!-- Вкладки источников -->
+            <HorizontalStackLayout Spacing="8">
+                <Button Text="Мои треки" Style="{StaticResource TabButtonActive}"
+                        Command="{Binding LoadLibraryCommand}" />
+                <Button Text="YouTube" Style="{StaticResource TabButton}"
+                        Command="{Binding SearchOnlineCommand}" />
+                <Button Text="Добавить файлы" Style="{StaticResource TabButton}"
+                        Command="{Binding ImportFilesCommand}" />
+            </HorizontalStackLayout>
+
+        </VerticalStackLayout>
+
+        <!-- Список треков -->
+        <CollectionView Grid.Row="1"
+                         ItemsSource="{Binding Tracks}"
+                         Margin="10,0,10,0"
+                         SelectionMode="None">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="viewmodels:TrackItemViewModel">
+                    <Grid Padding="10,10" ColumnDefinitions="56,*,Auto" ColumnSpacing="14">
+                        <Grid.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:MainViewModel}}, Path=PlayTrackCommand}"
+                                                   CommandParameter="{Binding .}" />
+                        </Grid.GestureRecognizers>
+
+                        <Frame Grid.Column="0" WidthRequest="52" HeightRequest="52" CornerRadius="12"
+                               Padding="0" HasShadow="False" IsClippedToBounds="True"
+                               BackgroundColor="{StaticResource SurfaceElevated}">
+                            <Image Source="{Binding ArtworkPath}" Aspect="AspectFill" />
+                        </Frame>
+
+                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                            <Label Text="{Binding Title}" Style="{StaticResource TrackTitleLabel}" LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding Subtitle}" Style="{StaticResource TrackSubtitleLabel}" LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+
+                        <Button Grid.Column="2" Text="⋮" FontSize="20" TextColor="{StaticResource TextSecondary}"
+                                BackgroundColor="Transparent" Command="{Binding ToggleFavoriteCommand}" />
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Мини-плеер снизу -->
+        <Frame Grid.Row="2" Margin="10" Padding="12" CornerRadius="26" HasShadow="False"
+               BackgroundColor="{StaticResource AccentBlue}"
+               IsVisible="{Binding CurrentTrack, Converter={StaticResource NullToBoolConverter}}">
+            <Grid ColumnDefinitions="46,*,Auto,Auto" ColumnSpacing="12">
+                <Frame Grid.Column="0" WidthRequest="42" HeightRequest="42" CornerRadius="21"
+                       Padding="0" HasShadow="False" IsClippedToBounds="True" BackgroundColor="Black">
+                    <Image Source="{Binding CurrentTrack.ArtworkPath}" Aspect="AspectFill" />
+                </Frame>
+
+                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                    <Label Text="{Binding CurrentTrack.Title}" TextColor="White" FontAttributes="Bold" FontSize="14" LineBreakMode="TailTruncation" />
+                    <Label Text="{Binding CurrentTrack.Artist}" TextColor="#DDDDDD" FontSize="12" LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+
+                <Button Grid.Column="2" Text="⏸" FontSize="20" TextColor="White" BackgroundColor="Transparent"
+                        Command="{Binding TogglePlayPauseCommand}" />
+                <Button Grid.Column="3" Text="⏭" FontSize="20" TextColor="White" BackgroundColor="Transparent"
+                        Command="{Binding NextTrackCommand}" />
+            </Grid>
+        </Frame>
+
+    </Grid>
+</ContentPage>
