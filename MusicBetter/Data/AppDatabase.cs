@@ -3,42 +3,39 @@ using SQLite;
 
 namespace MusicBetter.Data;
 
+/// <summary>
+/// Вся база данных хранится локально на устройстве (файл .db3 в AppDataDirectory).
+/// Это значит: избранное, локальные треки и плейлисты работают полностью офлайн,
+/// без какого-либо облака и без рекламы/трекеров.
+/// </summary>
 public class AppDatabase
 {
     private readonly SQLiteAsyncConnection _db;
-    private static AppDatabase? _instance;
-    private static readonly SemaphoreSlim _initLock = new(1, 1);
-    private bool _initialized;
+    private readonly Task _initTask;
 
+    private static AppDatabase? _instance;
     public static AppDatabase Instance =>
         _instance ??= new AppDatabase(Path.Combine(FileSystem.AppDataDirectory, "musicbetter.db3"));
 
     private AppDatabase(string dbPath)
     {
         _db = new SQLiteAsyncConnection(dbPath);
+        // Инициализация таблиц запускается сразу, но НЕ блокирует конструктор —
+        // блокирующий .Wait()/.Result на асинхронном коде в конструкторе синглтона
+        // мог приводить к зависанию/краху на старте (частая причина ANR/крашей в MAUI).
+        _initTask = InitializeAsync();
     }
 
-    private async Task EnsureInitializedAsync()
+    private async Task InitializeAsync()
     {
-        if (_initialized) return;
-
-        await _initLock.WaitAsync();
-        try
-        {
-            if (_initialized) return;
-
-            await _db.CreateTableAsync<Track>();
-            await _db.CreateTableAsync<Playlist>();
-            await _db.CreateTableAsync<PlaylistTrack>();
-            _initialized = true;
-        }
-        finally
-        {
-            _initLock.Release();
-        }
+        await _db.CreateTableAsync<Track>();
+        await _db.CreateTableAsync<Playlist>();
+        await _db.CreateTableAsync<PlaylistTrack>();
     }
 
-    // ========== Tracks ==========
+    private async Task EnsureInitializedAsync() => await _initTask;
+
+    // --- Tracks ---
 
     public async Task<List<Track>> GetAllTracksAsync()
     {
@@ -92,19 +89,17 @@ public class AppDatabase
 
     public async Task ToggleFavoriteAsync(Track track)
     {
-        await EnsureInitializedAsync();
         track.IsFavorite = !track.IsFavorite;
         await SaveTrackAsync(track);
     }
 
     public async Task MarkPlayedAsync(Track track)
     {
-        await EnsureInitializedAsync();
         track.LastPlayedAt = DateTime.UtcNow;
         await SaveTrackAsync(track);
     }
 
-    // ========== Playlists ==========
+    // --- Playlists ---
 
     public async Task<List<Playlist>> GetPlaylistsAsync()
     {
@@ -123,16 +118,8 @@ public class AppDatabase
     public async Task AddToPlaylistAsync(int playlistId, int trackId)
     {
         await EnsureInitializedAsync();
-        var count = await _db.Table<PlaylistTrack>()
-            .Where(pt => pt.PlaylistId == playlistId)
-            .CountAsync();
-
-        await _db.InsertAsync(new PlaylistTrack
-        {
-            PlaylistId = playlistId,
-            TrackId = trackId,
-            SortOrder = count
-        });
+        var count = await _db.Table<PlaylistTrack>().Where(pt => pt.PlaylistId == playlistId).CountAsync();
+        await _db.InsertAsync(new PlaylistTrack { PlaylistId = playlistId, TrackId = trackId, SortOrder = count });
     }
 
     public async Task<List<Track>> GetPlaylistTracksAsync(int playlistId)
@@ -147,12 +134,8 @@ public class AppDatabase
         var tracks = new List<Track>();
         foreach (var link in links)
         {
-            var track = await _db.Table<Track>()
-                .Where(t => t.Id == link.TrackId)
-                .FirstOrDefaultAsync();
-
-            if (track != null)
-                tracks.Add(track);
+            var track = await _db.Table<Track>().Where(t => t.Id == link.TrackId).FirstOrDefaultAsync();
+            if (track != null) tracks.Add(track);
         }
         return tracks;
     }
